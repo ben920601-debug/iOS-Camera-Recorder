@@ -1,0 +1,21 @@
+# Xcode
+DerivedData/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+xcuserdata/
+.DS_Store
+
+# CocoaPods
+Pods/
+
+# SPM
+.build/
+
+# Fastlane
+fastlane/report.xml
+fastlane/Preview.html
+fastlane/screenshots
+
+# Archives / IPA
+*.ipa
+*.xcarchive
