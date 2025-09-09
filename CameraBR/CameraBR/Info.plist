@@ -3,6 +3,8 @@
 <plist version="1.0">
 <dict>
 	<key>NSPhotoLibraryUsageDescription</key>
-	<string>要讀取相簿以顯示並播放錄影</string>
+	<string>需要讀取相簿以瀏覽錄影檔</string>
+	<key>NSPhotoLibraryAddUsageDescription</key>
+	<string>需要使用相簿來儲存與刪除錄影檔</string>
 </dict>
 </plist>

@@ -173,10 +173,29 @@ final class CameraViewController: UIViewController {
         previewLayer.videoGravity = .resizeAspectFill
         previewContainer.layer.addSublayer(previewLayer)
        }
+    
+    private func setupBackButton() {
+        let backButton = UIButton(type: .system)
+        backButton.setTitle("← Back", for: .normal)
+        backButton.setTitleColor(.white, for: .normal)
+        backButton.titleLabel?.font = UIFont.systemFont(ofSize: 18, weight: .semibold)
+        backButton.translatesAutoresizingMaskIntoConstraints = false
+        backButton.addTarget(self, action: #selector(dismissSelf), for: .touchUpInside)
+        
+        view.addSubview(backButton)
+        NSLayoutConstraint.activate([
+            backButton.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 12),
+            backButton.leadingAnchor.constraint(equalTo: view.leadingAnchor, constant: 16)
+        ])
+    }
+
+    @objc private func dismissSelf() {
+        dismiss(animated: true, completion: nil)
+    }
 
     // MARK: - Controls
     private func setupControls() {
-        // === Bars ===
+        // ===== Bars =====
         topBar.backgroundColor = .black
         topBar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(topBar)
@@ -185,11 +204,11 @@ final class CameraViewController: UIViewController {
         bottomBar.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(bottomBar)
 
-        let topH: CGFloat = 65
-        let bottomH: CGFloat = 80
+        let topH: CGFloat = 60
+        let bottomH: CGFloat = 60
 
         NSLayoutConstraint.activate([
-            // 上黑框延伸到狀態列底下
+            // 上黑框從螢幕頂端開始（覆蓋狀態列底下）
             topBar.topAnchor.constraint(equalTo: view.topAnchor),
             topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
             topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
@@ -202,11 +221,12 @@ final class CameraViewController: UIViewController {
             bottomBar.heightAnchor.constraint(equalToConstant: bottomH)
         ])
 
-        // === 中間相機預覽容器（夾在上下黑框之間） ===
+        // ===== 中間相機預覽容器 =====
         previewContainer.translatesAutoresizingMaskIntoConstraints = false
         view.addSubview(previewContainer)
         view.bringSubviewToFront(topBar)
         view.bringSubviewToFront(bottomBar)
+
         NSLayoutConstraint.activate([
             previewContainer.topAnchor.constraint(equalTo: topBar.bottomAnchor),
             previewContainer.bottomAnchor.constraint(equalTo: bottomBar.topAnchor),
@@ -214,39 +234,66 @@ final class CameraViewController: UIViewController {
             previewContainer.trailingAnchor.constraint(equalTo: view.trailingAnchor)
         ])
 
-        // === 上黑框：計時器 + Lock ===
-        // 計時器
+        // ===== 上黑框內容：Timer（左）＋ Lock（中）＋ Back（右） =====
+        // Timer
         timerLabel.textColor = .white
         timerLabel.font = UIFont.monospacedDigitSystemFont(ofSize: 16, weight: .medium)
+        timerLabel.textAlignment = .left
         timerLabel.text = "00:00"
         timerLabel.translatesAutoresizingMaskIntoConstraints = false
         topBar.addSubview(timerLabel)
-        
-        NSLayoutConstraint.activate([
-            // 貼齊 topBar 的下緣，避免與狀態列重疊
-            timerLabel.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 16),
-            timerLabel.bottomAnchor.constraint(equalTo: topBar.bottomAnchor, constant: -8)
-            ])
 
-        // Lock（右上角，圖示）
-        let lockIcon = makeLockIcon(size: 20, lineWidth: 2, color: .white) // ↓ 第3步有方法
-        lockButton.setImage(lockIcon, for: .normal)
-        lockButton.tintColor = .white
-        lockButton.backgroundColor = UIColor(white: 0.15, alpha: 1)
+        // Lock（圖示；iOS12 fallback 用文字）
+        if #available(iOS 13.0, *) {
+            lockButton.setImage(UIImage(systemName: "lock.fill"), for: .normal)
+            lockButton.tintColor = .white
+        } else {
+            lockButton.setTitle("Lock", for: .normal)
+            lockButton.setTitleColor(.white, for: .normal)
+        }
+        lockButton.backgroundColor = UIColor(white: 0.15, alpha: 0.8)
         lockButton.layer.cornerRadius = 8
+        lockButton.contentEdgeInsets = UIEdgeInsets(top: 5, left: 12, bottom: 6, right: 10)
         lockButton.translatesAutoresizingMaskIntoConstraints = false
         lockButton.addTarget(self, action: #selector(toggleShield), for: .touchUpInside)
         topBar.addSubview(lockButton)
 
+        // Back（右）
+        let backButton = UIButton(type: .system)
+        if #available(iOS 13.0, *) {
+            backButton.setImage(UIImage(systemName: "chevron.backward"), for: .normal)
+            backButton.tintColor = .white
+        } else {
+            backButton.setTitle("Back", for: .normal)
+            backButton.setTitleColor(.white, for: .normal)
+        }
+        backButton.backgroundColor = UIColor(white: 0.15, alpha: 1)
+        backButton.layer.cornerRadius = 8
+        backButton.contentEdgeInsets = UIEdgeInsets(top: 6, left: 10, bottom: 6, right: 10)
+        backButton.translatesAutoresizingMaskIntoConstraints = false
+        backButton.addTarget(self, action: #selector(dismissSelf), for: .touchUpInside)
+        topBar.addSubview(backButton)
+
         NSLayoutConstraint.activate([
-            lockButton.trailingAnchor.constraint(equalTo: topBar.trailingAnchor, constant: -16),
-            lockButton.bottomAnchor.constraint(equalTo: topBar.bottomAnchor, constant: -8), // ✅ 貼齊上黑框下緣
-            lockButton.widthAnchor.constraint(equalToConstant: 44),
-            lockButton.heightAnchor.constraint(equalToConstant: 36)
+            // Timer 左＋貼底
+            timerLabel.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 20),
+            timerLabel.bottomAnchor.constraint(equalTo: topBar.bottomAnchor, constant: -8),
+
+            // Lock 置中＋貼底
+            lockButton.centerXAnchor.constraint(equalTo: topBar.centerXAnchor),
+            lockButton.bottomAnchor.constraint(equalTo: topBar.bottomAnchor, constant: -2),
+            lockButton.heightAnchor.constraint(equalToConstant: 36),
+            lockButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 45),
+
+            // Back 右＋貼底
+            backButton.trailingAnchor.constraint(equalTo: topBar.trailingAnchor, constant: -16),
+            backButton.bottomAnchor.constraint(equalTo: topBar.bottomAnchor, constant: -2),
+            backButton.heightAnchor.constraint(equalToConstant: 36),
+            backButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 40)
         ])
 
-        // === 下黑框：Album（左下） / REC（正下） / Flip（右下） ===
-        // REC（大圓）
+        // ===== 下黑框內容：Album（左）＋ REC（中）＋ Flip（右） =====
+        // REC
         recordButton.setTitle("REC", for: .normal)
         recordButton.setTitleColor(.white, for: .normal)
         recordButton.backgroundColor = UIColor.red.withAlphaComponent(0.85)
@@ -256,20 +303,19 @@ final class CameraViewController: UIViewController {
         recordButton.addTarget(self, action: #selector(toggleRecord), for: .touchUpInside)
         bottomBar.addSubview(recordButton)
 
-        // Album（左下，顯示最新影片縮圖）
-        // Album（左下，顯示最新影片縮圖）
-        let albumBtn = albumButton // 只是取個短名
-        albumBtn.setTitle(nil, for: .normal)
-        albumBtn.backgroundColor = UIColor(white: 0.15, alpha: 1)
-        albumBtn.layer.cornerRadius = 6
-        albumBtn.clipsToBounds = true
-        albumBtn.translatesAutoresizingMaskIntoConstraints = false
-        albumBtn.addTarget(self, action: #selector(openAlbum), for: .touchUpInside)
-        // 讓縮圖填滿按鈕
-        albumBtn.imageView?.contentMode = .scaleAspectFill
-        bottomBar.addSubview(albumBtn)
-            
-        // Flip（右）
+        // Album（縮圖樣式）
+        albumButton.setTitle(nil, for: .normal)
+        albumButton.backgroundColor = UIColor(white: 0.15, alpha: 1)
+        albumButton.layer.cornerRadius = 6
+        albumButton.clipsToBounds = true
+        albumButton.translatesAutoresizingMaskIntoConstraints = false
+        albumButton.imageView?.contentMode = .scaleAspectFill
+        albumButton.adjustsImageWhenHighlighted = false
+        albumButton.tintColor = .clear
+        albumButton.addTarget(self, action: #selector(openAlbum), for: .touchUpInside)
+        bottomBar.addSubview(albumButton)
+
+        // Flip
         switchButton.setTitle("Flip", for: .normal)
         switchButton.setTitleColor(.white, for: .normal)
         switchButton.backgroundColor = UIColor(white: 0.15, alpha: 1)
@@ -279,22 +325,24 @@ final class CameraViewController: UIViewController {
         switchButton.addTarget(self, action: #selector(switchCamera), for: .touchUpInside)
         bottomBar.addSubview(switchButton)
 
+        let albumSide: CGFloat = 44
+
         NSLayoutConstraint.activate([
-            // REC：正中間
+            // REC：正中＋貼底
             recordButton.centerXAnchor.constraint(equalTo: bottomBar.centerXAnchor),
-            recordButton.centerYAnchor.constraint(equalTo: bottomBar.centerYAnchor),
-            recordButton.widthAnchor.constraint(equalToConstant: 60),
-            recordButton.heightAnchor.constraint(equalToConstant: 60),
+            recordButton.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor, constant: -1),
+            recordButton.widthAnchor.constraint(equalToConstant: 55),
+            recordButton.heightAnchor.constraint(equalToConstant: 55),
 
             // Album：左下
-            albumBtn.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 16),
-            albumBtn.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor, constant: -8), // ✅ 貼齊下黑框下緣
-            albumBtn.widthAnchor.constraint(equalToConstant: albumThumbSide),
-            albumBtn.heightAnchor.constraint(equalToConstant: albumThumbSide),
+            albumButton.leadingAnchor.constraint(equalTo: bottomBar.leadingAnchor, constant: 16),
+            albumButton.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor, constant: -8),
+            albumButton.widthAnchor.constraint(equalToConstant: albumSide),
+            albumButton.heightAnchor.constraint(equalToConstant: albumSide),
 
             // Flip：右下
             switchButton.trailingAnchor.constraint(equalTo: bottomBar.trailingAnchor, constant: -16),
-            switchButton.centerYAnchor.constraint(equalTo: recordButton.centerYAnchor),
+            switchButton.bottomAnchor.constraint(equalTo: bottomBar.bottomAnchor, constant: -8),
             switchButton.widthAnchor.constraint(equalToConstant: 72),
             switchButton.heightAnchor.constraint(equalToConstant: 36)
         ])
