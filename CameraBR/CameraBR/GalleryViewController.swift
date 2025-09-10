@@ -9,199 +9,188 @@ import UIKit
 import Photos
 
 final class GalleryViewController: UIViewController {
-
-    private var assets: [PHAsset] = []
     private var collectionView: UICollectionView!
-    private var selectedAssets: Set<IndexPath> = []
-    private var deleteButton: UIButton?
+    private var assets: [PHAsset] = []
+    private var selectedAssets: [PHAsset] = []
+    private var isDeleteMode = false
+
+    private let backButton = UIButton(type: .system)
+    private let actionButton = UIButton(type: .system)
+    private let topBar = UIView()
 
     override func viewDidLoad() {
         super.viewDidLoad()
-        view.backgroundColor = .black
+        view.backgroundColor = .white
+        setupTopBar()
         setupCollectionView()
-        setupLongPressGesture()
-        checkPhotoPermission()
+        fetchAssets()
     }
 
-    // MARK: - CollectionView
-    private func setupCollectionView() {
-        let layout = UICollectionViewFlowLayout()
-        layout.minimumInteritemSpacing = 1
-        layout.minimumLineSpacing = 1
-        let itemSize = (UIScreen.main.bounds.width - 3) / 4
-        layout.itemSize = CGSize(width: itemSize, height: itemSize)
-
-        collectionView = UICollectionView(frame: view.bounds, collectionViewLayout: layout)
-        collectionView.backgroundColor = .black
-        collectionView.dataSource = self
-        collectionView.delegate = self
-        collectionView.allowsMultipleSelection = true
-        collectionView.register(GalleryCell.self, forCellWithReuseIdentifier: "GalleryCell")
-        collectionView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        view.addSubview(collectionView)
+    override func viewWillAppear(_ animated: Bool) {
+        super.viewWillAppear(animated)
+        navigationController?.setNavigationBarHidden(true, animated: false)
     }
 
-    // MARK: - 權限
-    private func checkPhotoPermission() {
-        let status = PHPhotoLibrary.authorizationStatus()
-        if status == .authorized {
-            loadAssets()
-        } else {
-            PHPhotoLibrary.requestAuthorization { newStatus in
-                if newStatus == .authorized {
-                    self.loadAssets()
-                }
-            }
-        }
+    override func viewWillDisappear(_ animated: Bool) {
+        super.viewWillDisappear(animated)
+        navigationController?.setNavigationBarHidden(false, animated: false)
+    }
+    
+    override var prefersStatusBarHidden: Bool {
+        return false   // ❌ 不要隱藏
     }
 
-    private func loadAssets() {
-        let fetchOptions = PHFetchOptions()
-        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
-        let results = PHAsset.fetchAssets(with: fetchOptions)
-        assets.removeAll()
-        results.enumerateObjects { asset, _, _ in
-            self.assets.append(asset)
-        }
-        DispatchQueue.main.async {
-            self.collectionView.reloadData()
-        }
+    override var preferredStatusBarStyle: UIStatusBarStyle {
+        return .lightContent   // ✅ 白色文字 (搭配黑色 bar)
     }
+    
+    // MARK: - UI
+    private func setupTopBar() {
 
-    // MARK: - 長按觸發多選模式
-    private func setupLongPressGesture() {
-        let longPress = UILongPressGestureRecognizer(target: self, action: #selector(handleLongPress(_:)))
-        collectionView.addGestureRecognizer(longPress)
-    }
-
-    @objc private func handleLongPress(_ gesture: UILongPressGestureRecognizer) {
-        if gesture.state == .began {
-            if deleteButton == nil {
-                addDeleteButton()
-            }
-        }
-    }
-
-    // MARK: - 刪除按鈕
-    private func addDeleteButton() {
-        deleteButton = UIButton(type: .system)
-        deleteButton?.setTitle("刪除", for: .normal)
-        deleteButton?.setTitleColor(.red, for: .normal)
-        deleteButton?.backgroundColor = UIColor(white: 0.2, alpha: 0.8)
-        deleteButton?.layer.cornerRadius = 8
-        deleteButton?.translatesAutoresizingMaskIntoConstraints = false
-        deleteButton?.addTarget(self, action: #selector(deleteSelectedAssets), for: .touchUpInside)
-
-        if let btn = deleteButton {
-            view.addSubview(btn)
-            NSLayoutConstraint.activate([
-                btn.topAnchor.constraint(equalTo: view.safeAreaLayoutGuide.topAnchor, constant: 10),
-                btn.trailingAnchor.constraint(equalTo: view.trailingAnchor, constant: -16),
-                btn.widthAnchor.constraint(equalToConstant: 60),
-                btn.heightAnchor.constraint(equalToConstant: 35)
-            ])
-        }
+        topBar.backgroundColor = .black
+        topBar.translatesAutoresizingMaskIntoConstraints = false
+        view.addSubview(topBar)
         
-        let backButton = UIButton(type: .system)
-        if #available(iOS 13.0, *) {
-            backButton.setImage(UIImage(systemName: "chevron.backward"), for: .normal)
-            backButton.tintColor = .white
-        } else {
-            backButton.setTitle("Back", for: .normal)
-            backButton.setTitleColor(.white, for: .normal)
-        }
-        backButton.backgroundColor = UIColor(white: 0.15, alpha: 1)
-        backButton.layer.cornerRadius = 8
-        backButton.contentEdgeInsets = UIEdgeInsets(top: 6, left: 10, bottom: 6, right: 10)
-        backButton.translatesAutoresizingMaskIntoConstraints = false
-        
+        let statusBarHeight = UIApplication.shared.statusBarFrame.height
+
         NSLayoutConstraint.activate([
-        backButton.heightAnchor.constraint(equalToConstant: 36),
-        backButton.widthAnchor.constraint(greaterThanOrEqualToConstant: 40)
+            topBar.topAnchor.constraint(equalTo: view.topAnchor),
+            topBar.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            topBar.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            topBar.heightAnchor.constraint(equalToConstant: 33 + statusBarHeight)
+        ])
+        
+        // Back Button
+        backButton.setTitle("Back", for: .normal)
+        backButton.setTitleColor(.white, for: .normal)
+        backButton.translatesAutoresizingMaskIntoConstraints = false
+        backButton.addTarget(self, action: #selector(backTapped), for: .touchUpInside)
+        topBar.addSubview(backButton)
+
+        NSLayoutConstraint.activate([
+            backButton.topAnchor.constraint(equalTo: topBar.topAnchor, constant: 20),
+            backButton.leadingAnchor.constraint(equalTo: topBar.leadingAnchor, constant: 15)
+        ])
+
+        // Action Button (選取/刪除)
+        actionButton.setTitle("選取", for: .normal)
+        actionButton.setTitleColor(.white, for: .normal)
+        actionButton.translatesAutoresizingMaskIntoConstraints = false
+        actionButton.addTarget(self, action: #selector(toggleDeleteMode), for: .touchUpInside)
+        topBar.addSubview(actionButton)
+
+        NSLayoutConstraint.activate([
+            actionButton.topAnchor.constraint(equalTo: topBar.topAnchor, constant: 20),
+            actionButton.trailingAnchor.constraint(equalTo: topBar.trailingAnchor, constant: -16)
         ])
     }
 
-    @objc private func deleteSelectedAssets() {
+    private func setupCollectionView() {
+        let layout = UICollectionViewFlowLayout()
+        layout.itemSize = CGSize(width: 100, height: 100)
+        layout.minimumInteritemSpacing = 5
+        layout.minimumLineSpacing = 5
+
+        collectionView = UICollectionView(frame: .zero, collectionViewLayout: layout)
+        collectionView.backgroundColor = .white
+        collectionView.translatesAutoresizingMaskIntoConstraints = false
+        collectionView.dataSource = self
+        collectionView.delegate = self
+        collectionView.register(GalleryCell.self, forCellWithReuseIdentifier: "GalleryCell")
+
+        view.addSubview(collectionView)
+
+        NSLayoutConstraint.activate([
+            collectionView.topAnchor.constraint(equalTo: topBar.bottomAnchor),
+            collectionView.leadingAnchor.constraint(equalTo: view.leadingAnchor),
+            collectionView.trailingAnchor.constraint(equalTo: view.trailingAnchor),
+            collectionView.bottomAnchor.constraint(equalTo: view.bottomAnchor)
+        ])
+    }
+
+    // MARK: - Data
+    private func fetchAssets() {
+        let fetchOptions = PHFetchOptions()
+        fetchOptions.sortDescriptors = [NSSortDescriptor(key: "creationDate", ascending: false)]
+        let result = PHAsset.fetchAssets(with: .image, options: fetchOptions)
+
+        result.enumerateObjects { asset, _, _ in
+            self.assets.append(asset)
+        }
+
+        collectionView.reloadData()
+    }
+
+    // MARK: - Actions
+    @objc private func backTapped() {
+        dismiss(animated: true, completion: nil)
+    }
+
+    @objc private func toggleDeleteMode() {
+        isDeleteMode.toggle()
+        actionButton.setTitle(isDeleteMode ? "刪除" : "選取", for: .normal)
+
+        if !isDeleteMode {
+            deleteSelectedAssets()
+        } else {
+            selectedAssets.removeAll()
+        }
+
+        collectionView.reloadData()
+    }
+
+    private func deleteSelectedAssets() {
         guard !selectedAssets.isEmpty else { return }
-        let assetsToDelete = selectedAssets.map { assets[$0.item] }
 
         PHPhotoLibrary.shared().performChanges({
-            PHAssetChangeRequest.deleteAssets(assetsToDelete as NSArray)
+            PHAssetChangeRequest.deleteAssets(self.selectedAssets as NSArray)
         }) { success, error in
-            if success {
-                self.selectedAssets.removeAll()
-                self.loadAssets()
-                DispatchQueue.main.async {
-                    self.deleteButton?.removeFromSuperview()
-                    self.deleteButton = nil
+            DispatchQueue.main.async {
+                if success {
+                    self.assets.removeAll { self.selectedAssets.contains($0) }
+                    self.selectedAssets.removeAll()
+                    self.collectionView.reloadData()
+                } else if let error = error {
+                    print("刪除失敗: \(error.localizedDescription)")
                 }
-            } else {
-                print("❌ 刪除失敗: \(String(describing: error))")
             }
         }
     }
 }
 
-// MARK: - UICollectionView
+// MARK: - CollectionView
 extension GalleryViewController: UICollectionViewDataSource, UICollectionViewDelegate {
     func collectionView(_ collectionView: UICollectionView, numberOfItemsInSection section: Int) -> Int {
-        assets.count
+        return assets.count
     }
 
     func collectionView(_ collectionView: UICollectionView, cellForItemAt indexPath: IndexPath) -> UICollectionViewCell {
         let cell = collectionView.dequeueReusableCell(withReuseIdentifier: "GalleryCell", for: indexPath) as! GalleryCell
         let asset = assets[indexPath.item]
-
-        let manager = PHImageManager.default()
-        manager.requestImage(for: asset,
-                             targetSize: CGSize(width: 200, height: 200),
-                             contentMode: .aspectFill,
-                             options: nil) { image, _ in
-            cell.imageView.image = image
-        }
-
-        cell.layer.borderWidth = selectedAssets.contains(indexPath) ? 3 : 0
-        cell.layer.borderColor = UIColor.red.cgColor
-
+        let isSelected = selectedAssets.contains(asset)
+        cell.configure(with: asset, deleteMode: isDeleteMode, isSelected: isSelected)
         return cell
     }
 
     func collectionView(_ collectionView: UICollectionView, didSelectItemAt indexPath: IndexPath) {
-        if deleteButton != nil {
-            // 多選模式
-            if selectedAssets.contains(indexPath) {
-                selectedAssets.remove(indexPath)
+        let asset = assets[indexPath.item]
+
+        if isDeleteMode {
+            if let index = selectedAssets.firstIndex(of: asset) {
+                // 已選取 → 取消
+                selectedAssets.remove(at: index)
             } else {
-                selectedAssets.insert(indexPath)
+                // 未選取 → 加入
+                selectedAssets.append(asset)
             }
+            // 更新紅框框顯示
             collectionView.reloadItems(at: [indexPath])
         } else {
-            // ✅ 正常模式 → 打開檢視器
-            let vc = AssetViewerController(assets: assets, startIndex: indexPath.item)
-            vc.modalPresentationStyle = .fullScreen
-            present(vc, animated: true)
+            print("預覽照片：\(asset)")
         }
     }
 }
 
-// MARK: - Cell
-final class GalleryCell: UICollectionViewCell {
-    let imageView = UIImageView()
-    override init(frame: CGRect) {
-        super.init(frame: frame)
-        imageView.translatesAutoresizingMaskIntoConstraints = false
-        imageView.contentMode = .scaleAspectFill
-        imageView.clipsToBounds = true
-        contentView.addSubview(imageView)
-        NSLayoutConstraint.activate([
-            imageView.topAnchor.constraint(equalTo: contentView.topAnchor),
-            imageView.bottomAnchor.constraint(equalTo: contentView.bottomAnchor),
-            imageView.leadingAnchor.constraint(equalTo: contentView.leadingAnchor),
-            imageView.trailingAnchor.constraint(equalTo: contentView.trailingAnchor),
-        ])
-    }
-    required init?(coder: NSCoder) { fatalError("init(coder:) has not been implemented") }
-}
 
 
 
