@@ -42,6 +42,10 @@ final class CameraViewController: UIViewController {
     private var savedBrightness: CGFloat = UIScreen.main.brightness
     private var isShieldOn = false
     
+    // MARK: - Lock Screen (Shield)
+    private var blackoutView: UIView?   // 黑屏遮罩
+    private var isLocked: Bool = false  // 是否進入鎖定狀態
+    
     private var hideStatusBar = false { didSet { setNeedsStatusBarAppearanceUpdate() } }
     override var prefersStatusBarHidden: Bool { hideStatusBar }
     
@@ -300,7 +304,7 @@ final class CameraViewController: UIViewController {
         recordButton.titleLabel?.font = .boldSystemFont(ofSize: 18)
         recordButton.layer.cornerRadius = 30
         recordButton.translatesAutoresizingMaskIntoConstraints = false
-        recordButton.addTarget(self, action: #selector(toggleRecord), for: .touchUpInside)
+        recordButton.addTarget(self, action: #selector(toggleShield), for: .touchUpInside)
         bottomBar.addSubview(recordButton)
 
         // Album（縮圖樣式）
@@ -347,40 +351,7 @@ final class CameraViewController: UIViewController {
             switchButton.heightAnchor.constraint(equalToConstant: 36)
         ])
     }
-    
-    // 3-1 程式畫「鎖」圖示
-    private func makeLockIcon(size: CGFloat, lineWidth: CGFloat, color: UIColor) -> UIImage {
-        let scale = UIScreen.main.scale
-        let sz = CGSize(width: size, height: size)
-        UIGraphicsBeginImageContextWithOptions(sz, false, scale)
-        let ctx = UIGraphicsGetCurrentContext()!
 
-        color.setStroke()
-        ctx.setLineWidth(lineWidth)
-        ctx.setLineCap(.round)
-        ctx.setLineJoin(.round)
-
-        // 鎖體（方形）
-        let bodyRect = CGRect(x: lineWidth,
-                              y: size*0.45,
-                              width: size - lineWidth*2,
-                              height: size*0.45)
-        let bodyPath = UIBezierPath(roundedRect: bodyRect, cornerRadius: 3)
-        bodyPath.stroke()
-
-        // 鎖弓（上方半圓）
-        let arcCenter = CGPoint(x: size/2, y: size*0.45)
-        let radius = (size/2 - lineWidth*1.5)
-        let arc = UIBezierPath(arcCenter: arcCenter,
-                               radius: radius,
-                               startAngle: CGFloat.pi, endAngle: 0, clockwise: true)
-        ctx.addPath(arc.cgPath)
-        ctx.strokePath()
-
-        let img = UIGraphicsGetImageFromCurrentImageContext()!
-        UIGraphicsEndImageContext()
-        return img.withRenderingMode(.alwaysTemplate)
-    }
 
     // 讀取相簿權限後更新縮圖（iOS 12：.authorized / .denied / .restricted / .notDetermined）
     private func updateAlbumThumbnail() {
@@ -466,11 +437,6 @@ final class CameraViewController: UIViewController {
             vc.automaticallyAdjustsVideoMirroring = false
             vc.isVideoMirrored = isFront
         }
-    }
-
-    // MARK: - Actions
-    @objc private func toggleRecord() {
-        movieOutput.isRecording ? stopRecording() : startRecording()
     }
 
     private func startRecording() {
@@ -610,74 +576,47 @@ extension CameraViewController: AVCaptureFileOutputRecordingDelegate {
                     error: Error?) {
         saveToPhotos(outputFileURL)
     }
-    
-    // 進入/離開 Shield
+
+    // MARK: - Workaround 黑屏鎖屏
     @objc private func toggleShield() {
-        isShieldOn ? hideShield() : showShield()
+        if !isLocked {
+            let shield = UIView(frame: view.bounds)
+            shield.backgroundColor = UIColor.black
+            shield.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            shield.isUserInteractionEnabled = true
+
+            // 🔒 鎖頭圖示
+            let lockIcon = UILabel()
+            lockIcon.text = "🔒 Locked"
+            lockIcon.textColor = .white
+            lockIcon.font = UIFont.boldSystemFont(ofSize: 28)
+            lockIcon.translatesAutoresizingMaskIntoConstraints = false
+            shield.addSubview(lockIcon)
+
+            NSLayoutConstraint.activate([
+                lockIcon.centerXAnchor.constraint(equalTo: shield.centerXAnchor),
+                lockIcon.centerYAnchor.constraint(equalTo: shield.centerYAnchor)
+            ])
+
+            // 點擊解鎖
+            let tap = UITapGestureRecognizer(target: self, action: #selector(removeShield))
+            shield.addGestureRecognizer(tap)
+
+            view.addSubview(shield)
+            blackoutView = shield
+            isLocked = true
+
+            lockButton.setTitle("Unlock", for: .normal)
+        } else {
+            removeShield()
+        }
     }
-    
-    private func showShield() {
-        guard !isShieldOn else { return }
-        isShieldOn = true
-        // 記住狀態列與亮度
-        wasStatusBarHidden = prefersStatusBarHidden
-        savedBrightness = UIScreen.main.brightness
-        
-        // 調暗螢幕（你可調到 0.0 ~ 0.1 之間）
-        UIScreen.main.brightness = 0.01
-        
-        // 黑幕
-        shieldView.frame = view.bounds
-        shieldView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
-        shieldView.backgroundColor = .black
-        shieldView.isUserInteractionEnabled = true
-        view.addSubview(shieldView)
-        
-        // 上方顯示提示
-        let lab = UILabel()
-        lab.text = "滑動解鎖 ▶︎"
-        lab.textColor = UIColor(white: 1, alpha: 0.8)
-        lab.font = .systemFont(ofSize: 16, weight: .medium)
-        lab.translatesAutoresizingMaskIntoConstraints = false
-        shieldView.addSubview(lab)
-        NSLayoutConstraint.activate([
-            lab.centerXAnchor.constraint(equalTo: shieldView.centerXAnchor),
-            lab.topAnchor.constraint(equalTo: shieldView.safeAreaLayoutGuide.topAnchor, constant: 12)
-        ])
-        
-        // 解鎖滑塊（下方水平滑動）
-        unlockTrack.backgroundColor = UIColor(white: 1, alpha: 0.12)
-        unlockTrack.layer.cornerRadius = 24
-        unlockTrack.translatesAutoresizingMaskIntoConstraints = false
-        shieldView.addSubview(unlockTrack)
-        
-        unlockThumb.backgroundColor = UIColor(white: 1, alpha: 0.9)
-        unlockThumb.layer.cornerRadius = 20
-        unlockThumb.translatesAutoresizingMaskIntoConstraints = true // 用 frame 方便拖曳
-        unlockTrack.addSubview(unlockThumb)
-        
-        // 佈局滑道
-        NSLayoutConstraint.activate([
-            unlockTrack.leadingAnchor.constraint(equalTo: shieldView.leadingAnchor, constant: 24),
-            unlockTrack.trailingAnchor.constraint(equalTo: shieldView.trailingAnchor, constant: -24),
-            unlockTrack.bottomAnchor.constraint(equalTo: shieldView.safeAreaLayoutGuide.bottomAnchor, constant: -36),
-            unlockTrack.heightAnchor.constraint(equalToConstant: 48)
-        ])
-        shieldView.layoutIfNeeded()
-        unlockThumb.frame = CGRect(x: 4, y: 4, width: 40, height: 40)
-        
-        // 手勢：拖曳解鎖
-        let pan = UIPanGestureRecognizer(target: self, action: #selector(handleUnlockPan(_:)))
-        unlockThumb.addGestureRecognizer(pan)
-        unlockThumb.isUserInteractionEnabled = true
-        
-        // 緊急解鎖：三擊任意處
-        let tripleTap = UITapGestureRecognizer(target: self, action: #selector(emergencyUnlock))
-        tripleTap.numberOfTapsRequired = 3
-        shieldView.addGestureRecognizer(tripleTap)
-        
-        // 關閉狀態列（可選）
-        hideStatusBar = true
+
+    @objc private func removeShield() {
+        blackoutView?.removeFromSuperview()
+        blackoutView = nil
+        isLocked = false
+        lockButton.setTitle("Lock", for: .normal)
     }
     
     private func hideShield() {
